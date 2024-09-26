@@ -54,7 +54,7 @@ class Config:
 
 
 class ScrapyNodriverDownloadHandler(HTTPDownloadHandler):
-    
+
     def __init__(self, crawler: Crawler):
         super().__init__(settings=crawler.settings, crawler=crawler)
         verify_installed_reactor("twisted.internet.asyncioreactor.AsyncioSelectorReactor")
@@ -64,11 +64,11 @@ class ScrapyNodriverDownloadHandler(HTTPDownloadHandler):
         self.semaphore = asyncio.Semaphore(self.config.max_concurrent_pages)
         self.pages = 0
 
-    
+
     @classmethod
     def from_crawler(cls: Type[NodriverHandler], crawler: Crawler) -> NodriverHandler:
         return cls(crawler)
-    
+
 
     def _engine_started(self) -> Deferred:
         """Launch the browser. Use the engine_started signal as it supports returning deferreds."""
@@ -92,7 +92,12 @@ class ScrapyNodriverDownloadHandler(HTTPDownloadHandler):
 
     async def _create_page(self, request: Request, spider: Spider) -> Tab:
         await self.semaphore.acquire()
-        browser = await uc.start(headless=self.config.headless)
+
+        uc_kwargs = dict()
+        if uc_config := request.meta.get("nodriver_config"):
+            uc_kwargs["config"] = uc_config
+
+        browser = await uc.start(headless=self.config.headless, **uc_kwargs)
         page = await browser.get()
         self.pages += 1
         self.stats.inc_value("nodriver/page_count")
@@ -124,23 +129,23 @@ class ScrapyNodriverDownloadHandler(HTTPDownloadHandler):
         yield super().close()
         yield deferred_from_coro(self._close())
 
-    
+
     async def _close(self) -> None:
         logger.info("Closing browser")
 
-    
+
     def download_request(self, request: Request, spider: Spider) -> Deferred:
         if request.meta.get("nodriver"):
             self.resp_status = 200 # default
             return deferred_from_coro(self._download_request(request, spider))
         return super().download_request(request, spider)
-    
+
 
     async def _download_request(self, request: Request, spider: Spider) -> Response:
         page: Tab = request.meta.get("nodriver_page")
         if not isinstance(page, Tab) or page.closed:
             page = await self._create_page(request=request, spider=spider)
-        
+
         try:
             return await self._download_request_with_page(request, page, spider)
         except Exception as ex:
@@ -162,11 +167,11 @@ class ScrapyNodriverDownloadHandler(HTTPDownloadHandler):
                 self.stats.inc_value("nodriver/page_count/closed")
             raise
 
-    
+
     async def _download_request_with_page(self, request: Request, page: Tab, spider: Spider) -> Response:
         if request.meta.get("nodriver_include_page"):
             request.meta["nodriver_page"] = page
-        
+
         start_time = time.time()
         headers = {}
         def capture_headers(event: uc.cdp.network.RequestWillBeSent):
@@ -215,7 +220,7 @@ class ScrapyNodriverDownloadHandler(HTTPDownloadHandler):
             encoding=encoding,
             ip_address=None,
         )
-    
+
 
     async def _apply_page_methods(self, page: Tab, request: Request, spider: Spider) -> None:
         page_methods = request.meta.get("nodriver_page_methods") or ()

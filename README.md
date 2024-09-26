@@ -232,6 +232,90 @@ class AwesomeSpiderWithPage(scrapy.Spider):
         await page.close()
 ```
 
+### `nodriver_config`
+
+A nodriver [Config](https://ultrafunkamsterdam.github.io/nodriver/nodriver/classes/others_and_helpers.html#config-class) instance you would like to run your browser with. 
+It could be useful to configure custom browser executable and arguments.
+
+For example, this is how we could run google-chrome-beta without hardware 
+acceleration:
+
+```python
+import scrapy
+from nodriver import Config
+
+def start_requests(self):
+    yield scrapy.Request(
+        url="https://httpbin.org/get",
+        meta={
+          "nodriver": True,
+          "nodriver_config": Config(
+            browser_executable_path="/usr/bin/google-chrome-beta",
+            browser_args=["--disable-gpu"],
+          ),
+        },
+    )
+```
+
+This option also accepts child class of the nodriver Config. 
+
+For example, running browser via xvfb-run instead of running
+Xvfb in the background:
+
+```python
+import scrapy
+from nodriver import Config
+
+class MyNodriverConfig(Config):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.browser = self.browser_executable_path
+        self.browser_executable_path = "/usr/bin/xvfb-run"
+
+    # __call__ returns the arguments list used on browser execution
+    def __call__(self):
+        return [self.browser] + super().__call__()
+
+def start_requests(self):
+  yield scrapy.Request(
+    url="https://httpbin.org/get",
+    meta={
+      "nodriver": True,
+      "nodriver_config": MyNodriverConfig(
+        headless=False,
+        # You can safely omit this part of the configuration
+        # and nodriver will try to find your chrome executable itself.
+        browser_executable_path="/my/chrome/executable",
+        browser_args=["--my", "--arguments"],
+      ),
+    },
+  )
+```
+
+Please note, since this option is overriding configuration in `uc.start` function,
+[`NODRIVER_HEADLESS`](#nodriver_headless) configuration option will be overriden.
+Please use `headless` kwarg of the configuration `__init__` method to disable 
+headless mode:
+
+```python
+import scrapy
+from nodriver import Config
+
+def start_requests(self):
+    yield scrapy.Request(
+        url="https://httpbin.org/get",
+        meta={
+          "nodriver": True,
+          "nodriver_config": Config(
+            headless=False,
+            # My configuration
+          ),
+        },
+    )
+```
+
+
 **Notes:**
 
 * When passing `nodriver_include_page=True`, make sure pages are always closed
